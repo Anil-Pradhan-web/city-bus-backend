@@ -1,10 +1,18 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from buses.models import Bus
+from routes.models import Route
+from stops.models import Stop
 from .models import LiveLocation
 from .serializers import LiveLocationSerializer
-from buses.models import Bus
+from .utils import haversine
 
+
+# =========================
+# UPDATE LIVE LOCATION
+# =========================
 class UpdateLocationView(APIView):
     """
     POST: driver/simulator sends latest lat/lng
@@ -17,6 +25,9 @@ class UpdateLocationView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# =========================
+# CURRENT BUS LOCATION
+# =========================
 class CurrentLocationView(APIView):
     """
     GET: frontend fetches current bus location
@@ -25,75 +36,154 @@ class CurrentLocationView(APIView):
         try:
             bus = Bus.objects.get(id=bus_id)
         except Bus.DoesNotExist:
-            return Response({"detail": "Bus not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Bus not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        location = bus.locations.order_by('-timestamp').first()
+        location = LiveLocation.objects.filter(bus=bus).first()
         if not location:
-            return Response({"detail": "No live location yet"}, status=status.HTTP_200_OK)
+            return Response(
+                {"detail": "No live location yet"},
+                status=status.HTTP_200_OK
+            )
 
         serializer = LiveLocationSerializer(location)
         return Response(serializer.data)
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-
-from buses.models import Bus
-from .models import LiveLocation
-from routes.models import Route
-from stops.models import Stop
-from .utils import haversine
 
 
+# =========================
+# BUS ETA (NEXT STOP)
+# =========================
 class BusETAView(APIView):
     """
-    GET: Returns next stop and ETA (in minutes) for a bus
+    GET: Returns next stop and ETA (in minutes)
     """
-    AVG_SPEED_KMPH = 30  # assumed average city speed
 
-    def get(self, request, bus_id):
-        # 1. Get bus
+    AVG_SPEED_KMPH = 30
+
+    def get(self, request, bus_no):
         try:
-            bus = Bus.objects.get(id=bus_id)
+            bus = Bus.objects.get(bus_number=str(bus_no))
         except Bus.DoesNotExist:
-            return Response({"detail": "Bus not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Bus not found"}, status=404)
 
-        # 2. Latest live location
-        location = LiveLocation.objects.filter(bus=bus).order_by('-timestamp').first()
-        if not location:
-            return Response({"detail": "No live location yet"}, status=status.HTTP_200_OK)
+        live = LiveLocation.objects.filter(bus=bus).first()
+        if not live:
+            return Response({"detail": "No live location yet"}, status=200)
 
-        # 3. Route
         route = Route.objects.filter(bus=bus).first()
         if not route:
-            return Response({"detail": "No route assigned"}, status=status.HTTP_200_OK)
+            return Response({"detail": "No route assigned"}, status=200)
 
-        # 4. Stops (ordered)
-        stops = Stop.objects.filter(route=route).order_by('order')
-        if not stops.exists():
-            return Response({"detail": "No stops found"}, status=status.HTTP_200_OK)
+        stops = list(Stop.objects.filter(route=route).order_by("order"))
+        if not stops:
+            return Response({"detail": "No stops found"}, status=200)
 
-        # 5. Find nearest next stop
-        next_stop = None
-        min_distance = None
+        current_index = live.current_stop_index
+        next_index = (current_index + 1) % len(stops)
 
-        for stop in stops:
-            distance = haversine(
-                location.latitude, location.longitude,
-                stop.latitude, stop.longitude
-            )
-            if min_distance is None or distance < min_distance:
-                min_distance = distance
-                next_stop = stop
+        current_stop = stops[current_index]
+        next_stop = stops[next_index]
 
-        # 6. ETA calculation
-        eta_hours = min_distance / self.AVG_SPEED_KMPH
-        eta_minutes = max(1, round(eta_hours * 60))
+        # distance between current bus position and next stop
+        distance_km = haversine(
+            live.latitude,
+            live.longitude,
+            next_stop.latitude,
+            next_stop.longitude
+        )
+
+        eta_minutes = max(1, round((distance_km / self.AVG_SPEED_KMPH) * 60))
 
         return Response({
-            "bus_id": bus.id,
+            "bus_no": bus.bus_number,
+            "current_stop": current_stop.name,
             "next_stop": next_stop.name,
-            "distance_km": round(min_distance, 2),
+            "distance_km": round(distance_km, 2),
             "eta_minutes": eta_minutes
         })
-from django.conf import settings
-AVG_SPEED_KMPH = getattr(settings, 'AVG_BUS_SPEED_KMPH', 30)
+
+
+
+# =========================
+# BUS ROUTE (POLYLINE)
+# =========================
+class BusRouteView(APIView):
+    """
+    GET: Returns ordered stops for a bus route
+    """
+    def get(self, request, bus_no):
+        try:
+            bus = Bus.objects.get(bus_number=str(bus_no))
+        except Bus.DoesNotExist:
+            return Response({"detail": "Bus not found"}, status=404)
+
+        route = Route.objects.filter(bus=bus).first()
+        if not route:
+            return Response({"detail": "No route assigned"}, status=200)
+
+        stops = Stop.objects.filter(route=route).order_by("order")
+        if not stops.exists():
+            return Response({"detail": "No stops found"}, status=200)
+
+        return Response({
+            "bus_number": bus.bus_number,
+            "stops": [
+                {
+                    "name": s.name,
+                    "latitude": s.latitude,
+                    "longitude": s.longitude,
+                    "order": s.order
+                }
+                for s in stops
+            ]
+        })
+
+
+# =========================
+# MOVE BUS (CIRCULAR)
+# =========================
+class MoveBusView(APIView):
+    """
+    GET: Simulates bus moving stop-by-stop in circular route
+    """
+    def get(self, request, bus_no):
+        try:
+            bus = Bus.objects.get(bus_number=str(bus_no))
+        except Bus.DoesNotExist:
+            return Response({"error": "Bus not found"}, status=404)
+
+        route = Route.objects.filter(bus=bus).first()
+        if not route:
+            return Response({"error": "Route not assigned"}, status=404)
+
+        stops = list(Stop.objects.filter(route=route).order_by("order"))
+        if not stops:
+            return Response({"error": "No stops found"}, status=404)
+
+        live, _ = LiveLocation.objects.get_or_create(
+            bus=bus,
+            defaults={
+                "latitude": stops[0].latitude,
+                "longitude": stops[0].longitude,
+                "current_stop_index": 0
+            }
+        )
+
+        # 🔄 circular movement
+        next_index = (live.current_stop_index + 1) % len(stops)
+        next_stop = stops[next_index]
+
+        live.latitude = next_stop.latitude
+        live.longitude = next_stop.longitude
+        live.current_stop_index = next_index
+        live.save()
+
+        return Response({
+            "bus_no": bus.bus_number,
+            "latitude": live.latitude,
+            "longitude": live.longitude,
+            "stop_name": next_stop.name,
+            "stop_index": next_index
+        })

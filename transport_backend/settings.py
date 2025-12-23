@@ -129,4 +129,6 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 CORS_ALLOW_ALL_ORIGINS = True
+AVG_BUS_SPEED_KMPH = 30
+
 

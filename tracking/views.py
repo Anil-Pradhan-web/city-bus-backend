@@ -8,6 +8,8 @@ from stops.models import Stop
 from .models import LiveLocation
 from .serializers import LiveLocationSerializer
 from .utils import haversine
+from django.utils import timezone
+from datetime import timedelta
 
 
 # =========================
@@ -144,7 +146,7 @@ class BusRouteView(APIView):
 # =========================
 class MoveBusView(APIView):
     """
-    GET: Simulates bus moving stop-by-stop in circular route
+    GET: Simulates bus moving stop-by-stop safely (LOCKED)
     """
     def get(self, request, bus_no):
         try:
@@ -165,16 +167,32 @@ class MoveBusView(APIView):
             defaults={
                 "latitude": stops[0].latitude,
                 "longitude": stops[0].longitude,
-                "current_stop_index": 0
+                "current_stop_index": 0,
             }
         )
 
+        # 🔒 LOCK START
+        now = timezone.now()
+        if live.last_moved_at and (now - live.last_moved_at) < timedelta(seconds=10):
+            # ❌ ignore duplicate request
+            return Response({
+                "bus_no": bus.bus_number,
+                "latitude": live.latitude,
+                "longitude": live.longitude,
+                "stop_name": stops[live.current_stop_index].name,
+                "stop_index": live.current_stop_index,
+                "locked": True,
+            })
+        # 🔒 LOCK END
+
+        # ✅ SAFE MOVE
         next_index = (live.current_stop_index + 1) % len(stops)
         next_stop = stops[next_index]
 
         live.latitude = next_stop.latitude
         live.longitude = next_stop.longitude
         live.current_stop_index = next_index
+        live.last_moved_at = now   # 🔒 update time
         live.save()
 
         return Response({
@@ -182,5 +200,6 @@ class MoveBusView(APIView):
             "latitude": live.latitude,
             "longitude": live.longitude,
             "stop_name": next_stop.name,
-            "stop_index": next_index
+            "stop_index": next_index,
+            "locked": False,
         })

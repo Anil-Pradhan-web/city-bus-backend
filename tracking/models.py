@@ -1,7 +1,6 @@
 from django.db import models
 from buses.models import Bus
 
-
 class LiveLocation(models.Model):
     """
     Stores current live position of a bus and its route progress.
@@ -30,6 +29,13 @@ class LiveLocation(models.Model):
     timestamp = models.DateTimeField(
         auto_now=True,
         help_text="Last updated time"
+    )
+
+    # 🔒 ADD THIS FIELD (IMPORTANT)
+    last_moved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Prevents duplicate move calls"
     )
 
     class Meta:

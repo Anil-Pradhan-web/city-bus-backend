@@ -53,14 +53,14 @@ class CurrentLocationView(APIView):
 
 
 # =========================
-# BUS ETA (NEXT STOP)
+# BUS ETA (SIMPLE)
 # =========================
 class BusETAView(APIView):
     """
     GET: Returns next stop and ETA (in minutes)
     """
 
-    AVG_SPEED_KMPH = 30
+    AVG_SPEED_KMPH = 28
 
     def get(self, request, bus_no):
         try:
@@ -86,7 +86,6 @@ class BusETAView(APIView):
         current_stop = stops[current_index]
         next_stop = stops[next_index]
 
-        # distance between current bus position and next stop
         distance_km = haversine(
             live.latitude,
             live.longitude,
@@ -103,7 +102,6 @@ class BusETAView(APIView):
             "distance_km": round(distance_km, 2),
             "eta_minutes": eta_minutes
         })
-
 
 
 # =========================
@@ -142,7 +140,7 @@ class BusRouteView(APIView):
 
 
 # =========================
-# MOVE BUS (CIRCULAR)
+# MOVE BUS (SIMPLE CIRCULAR)
 # =========================
 class MoveBusView(APIView):
     """
@@ -171,7 +169,6 @@ class MoveBusView(APIView):
             }
         )
 
-        # 🔄 circular movement
         next_index = (live.current_stop_index + 1) % len(stops)
         next_stop = stops[next_index]
 

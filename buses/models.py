@@ -6,4 +6,3 @@ class Bus(models.Model):
 
     def __str__(self):
         return f"Bus {self.bus_number}"
-

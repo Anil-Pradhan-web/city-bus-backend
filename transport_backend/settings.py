@@ -142,7 +142,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 # CORS: default to not allowing all origins in production. Use env to enable.
-CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'False') == 'True'
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True') == 'True'
 # Optionally provide a comma-separated list of allowed origins via env.
 CORS_ALLOWED_ORIGINS = [o for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o]
 

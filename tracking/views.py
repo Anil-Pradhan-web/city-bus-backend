@@ -152,8 +152,8 @@ class MoveBusView(APIView):
     """
     POST: Simulates bus moving stop-by-stop safely (LOCKED)
     """
-    authentication_classes = [TokenAuthentication, SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    # authentication_classes = [TokenAuthentication, SessionAuthentication]
+    # permission_classes = [IsAuthenticated]
 
     def post(self, request, bus_no):
         try:

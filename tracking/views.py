@@ -1,6 +1,8 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.authentication import TokenAuthentication, SessionAuthentication
+from rest_framework.permissions import IsAuthenticated
 
 from buses.models import Bus
 from routes.models import Route
@@ -19,6 +21,8 @@ class UpdateLocationView(APIView):
     """
     POST: driver/simulator sends latest lat/lng
     """
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         serializer = LiveLocationSerializer(data=request.data)
         if serializer.is_valid():
@@ -146,9 +150,12 @@ class BusRouteView(APIView):
 # =========================
 class MoveBusView(APIView):
     """
-    GET: Simulates bus moving stop-by-stop safely (LOCKED)
+    POST: Simulates bus moving stop-by-stop safely (LOCKED)
     """
-    def get(self, request, bus_no):
+    authentication_classes = [TokenAuthentication, SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, bus_no):
         try:
             bus = Bus.objects.get(bus_number=str(bus_no))
         except Bus.DoesNotExist:

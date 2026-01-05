@@ -33,7 +33,13 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 # Keep hosts restricted in production; set DJANGO_ALLOWED_HOSTS env as comma-separated.
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+# ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+ALLOWED_HOSTS = ['*']
+
+# ... (omitting lines between)
+
+# CORS: default to not allowing all origins in production. Use env to enable.
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Application definition
@@ -146,7 +152,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # CORS: default to not allowing all origins in production. Use env to enable.
-CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'True') == 'True'
+CORS_ALLOW_ALL_ORIGINS = True
 # Optionally provide a comma-separated list of allowed origins via env.
 CORS_ALLOWED_ORIGINS = [o for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o]
 

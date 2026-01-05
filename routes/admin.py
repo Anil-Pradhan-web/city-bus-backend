@@ -3,5 +3,5 @@ from .models import Route
 
 @admin.register(Route)
 class RouteAdmin(admin.ModelAdmin):
-    list_display = ('name', 'bus')
-    list_filter = ('bus',)
+    list_display = ('name',)
+    search_fields = ('name',)

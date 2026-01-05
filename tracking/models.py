@@ -38,6 +38,11 @@ class LiveLocation(models.Model):
         help_text="Prevents duplicate move calls"
     )
 
+    is_moving_forward = models.BooleanField(
+        default=True,
+        help_text="True = Start to End, False = End to Start"
+    )
+
     class Meta:
         verbose_name = "Live Location"
         verbose_name_plural = "Live Locations"

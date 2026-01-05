@@ -69,7 +69,7 @@ class BusETAView(APIView):
     AVG_SPEED_KMPH = 28
 
     def get(self, request, bus_no):
-        buses = Bus.objects.filter(bus_number=str(bus_no))
+        buses = Bus.objects.filter(bus_number=str(bus_no)).select_related('route')
         if not buses.exists():
             return Response({"detail": "Bus not found"}, status=404)
 
@@ -140,7 +140,7 @@ class BusRouteView(APIView):
     """
     def get(self, request, bus_no):
         # We assume all buses with the same number share the same route
-        bus = Bus.objects.filter(bus_number=str(bus_no)).first()
+        bus = Bus.objects.filter(bus_number=str(bus_no)).select_related('route').first()
         if not bus:
             return Response({"detail": "Bus not found"}, status=404)
 
@@ -178,7 +178,7 @@ class MoveBusView(APIView):
     # permission_classes = [IsAuthenticated]
 
     def post(self, request, bus_no):
-        buses = Bus.objects.filter(bus_number=str(bus_no))
+        buses = Bus.objects.filter(bus_number=str(bus_no)).select_related('route')
         if not buses.exists():
             return Response({"error": "Bus not found"}, status=404)
 

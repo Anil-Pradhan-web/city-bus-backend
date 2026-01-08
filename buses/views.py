@@ -45,3 +45,46 @@ def update_bus(request, bus_id):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# =========================
+# GET BUS SCHEDULE
+# =========================
+@api_view(['GET'])
+def get_bus_schedule(request, bus_no):
+    """
+    GET: Returns schedule for a bus
+    Format: [{"time": "08:00 AM", "stop": "Name", "type": "Start"}, ...]
+    """
+    try:
+        # Get the first bus with this number (assuming schedules are similar if multiple)
+        # Or better, fetch all schedules for this bus number
+        # Dealing with duplicate buses: We pick one to show schedule.
+        bus = Bus.objects.filter(bus_number=str(bus_no)).first()
+        if not bus:
+            return Response({"error": "Bus not found"}, status=404)
+        
+        schedules = list(bus.schedules.all().order_by('arrival_time'))
+        
+        results = []
+        total = len(schedules)
+        
+        for index, sch in enumerate(schedules):
+            # Determine Type
+            if index == 0:
+                stop_type = "Start"
+            elif index == total - 1:
+                stop_type = "End"
+            else:
+                stop_type = "Stop"
+            
+            results.append({
+                "time": sch.arrival_time.strftime("%I:%M %p"), # 12-hour format with AM/PM
+                "stop": sch.stop.name,
+                "type": stop_type
+            })
+            
+        return Response(results)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

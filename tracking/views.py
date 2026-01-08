@@ -157,7 +157,7 @@ class BusRouteView(APIView):
             "bus_number": bus.bus_number,
             "stops": [
                 {
-                    "name": s.name,
+                    "stop_name": s.name,  # changed from 'name' to 'stop_name'
                     "latitude": s.latitude,
                     "longitude": s.longitude,
                     "order": s.order

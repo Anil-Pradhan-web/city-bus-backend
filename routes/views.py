@@ -109,15 +109,12 @@ class BusRouteView(APIView):
             )
 
         return Response({
-            "bus_number": bus.bus_number,
-            "route_name": route.name,
-            "route_id": route.id,
+            "bus_no": bus.bus_number,
             "stops": [
                 {
-                    "name": stop.name,
+                    "stop_name": stop.name,
                     "latitude": stop.latitude,
                     "longitude": stop.longitude,
-                    "order": stop.order
                 }
                 for stop in stops
             ]

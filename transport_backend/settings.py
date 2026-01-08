@@ -30,7 +30,7 @@ SECRET_KEY = os.environ.get(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Controlled via env var: set DJANGO_DEBUG=True in dev only.
-DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
+DEBUG = True  # Temporarily enabled for debugging
 
 # Keep hosts restricted in production; set DJANGO_ALLOWED_HOSTS env as comma-separated.
 # ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
@@ -39,7 +39,14 @@ ALLOWED_HOSTS = ['*']
 # ... (omitting lines between)
 
 # CORS: default to not allowing all origins in production. Use env to enable.
+# CORS: Allow all origins to prevent blocking frontend requests
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 
 
 # Application definition
@@ -58,6 +65,7 @@ INSTALLED_APPS = [
     'routes',
     'stops',
     'tracking',
+    'transport_backend.apps.AdminConfig',
 ]
 
 MIDDLEWARE = [

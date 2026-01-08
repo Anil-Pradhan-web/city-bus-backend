@@ -8,5 +8,10 @@ class Stop(models.Model):
     longitude = models.FloatField()
     order = models.PositiveIntegerField()
 
+    class Meta:
+        verbose_name = "Stop"
+        verbose_name_plural = "Stops"
+        ordering = ['route', 'order']
+
     def __str__(self):
         return self.name

@@ -38,7 +38,9 @@ ALLOWED_HOSTS = ['*']
 
 # ... (omitting lines between)
 
-# CORS: default to not allowing all origins in production. Use env to enable.
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # CORS: Allow all origins to prevent blocking frontend requests
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True

@@ -38,9 +38,7 @@ ALLOWED_HOSTS = ['*']
 
 # ... (omitting lines between)
 
-# Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
+# CORS: default to not allowing all origins in production. Use env to enable.
 # CORS: Allow all origins to prevent blocking frontend requests
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
@@ -159,6 +157,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # CORS: default to not allowing all origins in production. Use env to enable.

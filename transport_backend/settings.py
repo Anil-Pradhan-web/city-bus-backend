@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'routes',
     'stops',
     'tracking',
+    'feedback',  # New feedback app
     'transport_backend.apps.AdminConfig',
 ]
 

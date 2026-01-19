@@ -7,9 +7,11 @@ class BusSerializer(serializers.ModelSerializer):
     next_stop = serializers.SerializerMethodField()
     eta = serializers.SerializerMethodField()
 
+    city = serializers.SerializerMethodField()
+
     class Meta:
         model = Bus
-        fields = ['id', 'bus_number', 'is_active', 'next_stop', 'eta']
+        fields = ['id', 'bus_number', 'is_active', 'next_stop', 'eta', 'city']
 
     def get_next_stop(self, obj):
         live = LiveLocation.objects.filter(bus=obj).first()
@@ -30,6 +32,14 @@ class BusSerializer(serializers.ModelSerializer):
                 except:
                     pass
         return "Not Started"
+
+    def get_city(self, obj):
+        num = str(obj.bus_number)
+        if num.startswith('1'): return "Bhubaneswar"
+        if num.startswith('2'): return "Puri"
+        if num.startswith('3'): return "Berhampur"
+        if num.startswith('4'): return "Cuttack"
+        return "Odisha"
 
     def get_eta(self, obj):
         # Dummy ETA logic for list view (detailed ETA is in tracking API)

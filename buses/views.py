@@ -57,34 +57,111 @@ def get_bus_schedule(request, bus_no):
     Format: [{"time": "08:00 AM", "stop": "Name", "type": "Start"}, ...]
     """
     try:
-        # Get the first bus with this number (assuming schedules are similar if multiple)
-        # Or better, fetch all schedules for this bus number
-        # Dealing with duplicate buses: We pick one to show schedule.
-        bus = Bus.objects.filter(bus_number=str(bus_no)).first()
-        if not bus:
-            return Response({"error": "Bus not found"}, status=404)
+        from datetime import datetime, timedelta
+        from stops.models import Stop
         
-        schedules = list(bus.schedules.all().order_by('arrival_time'))
+        # Try to get bus and its route from database
+        bus = Bus.objects.filter(bus_number=str(bus_no)).select_related('route').first()
         
-        results = []
-        total = len(schedules)
-        
-        for index, sch in enumerate(schedules):
-            # Determine Type
-            if index == 0:
-                stop_type = "Start"
-            elif index == total - 1:
-                stop_type = "End"
-            else:
-                stop_type = "Stop"
+        if bus and bus.route:
+            # Get stops from database
+            stops = list(Stop.objects.filter(route=bus.route).order_by('order'))
             
-            results.append({
-                "time": sch.arrival_time.strftime("%I:%M %p"), # 12-hour format with AM/PM
-                "stop": sch.stop.name,
-                "type": stop_type
-            })
-            
-        return Response(results)
+            if stops:
+                # Generate schedule dynamically from database stops
+                results = []
+                
+                # Start time (6:00 AM)
+                start_time = datetime.strptime("06:00 AM", "%I:%M %p")
+                interval_minutes = 10  # 10 minutes between stops
+                
+                # Forward journey (Start to End)
+                current_time = start_time
+                total_stops = len(stops)
+                
+                for index, stop in enumerate(stops):
+                    if index == 0:
+                        stop_type = "Start"
+                    elif index == total_stops - 1:
+                        stop_type = "End"
+                    else:
+                        stop_type = "Stop"
+                    
+                    results.append({
+                        "time": current_time.strftime("%I:%M %p"),
+                        "stop": stop.name,
+                        "type": stop_type
+                    })
+                    
+                    current_time += timedelta(minutes=interval_minutes)
+                
+                # Add 30 minute break at end stop
+                current_time += timedelta(minutes=15)
+                
+                # Return journey (End to Start)
+                for index in range(total_stops - 1, -1, -1):
+                    stop = stops[index]
+                    
+                    if index == total_stops - 1:
+                        stop_type = "Start"
+                    elif index == 0:
+                        stop_type = "End"
+                    else:
+                        stop_type = "Stop"
+                    
+                    results.append({
+                        "time": current_time.strftime("%I:%M %p"),
+                        "stop": stop.name,
+                        "type": stop_type
+                    })
+                    
+                    current_time += timedelta(minutes=interval_minutes)
+                
+                return Response(results)
+        
+        # Fallback schedules if no database stops found
+        FALLBACK_SCHEDULES = {
+            "200": [
+                {"time": "06:00 AM", "stop": "Puri Beach", "type": "Start"},
+                {"time": "06:15 AM", "stop": "Swargadwar", "type": "Stop"},
+                {"time": "06:30 AM", "stop": "Sea Beach Road", "type": "Stop"},
+                {"time": "06:45 AM", "stop": "Grand Road", "type": "Stop"},
+                {"time": "07:00 AM", "stop": "Gundicha Temple", "type": "Stop"},
+                {"time": "07:15 AM", "stop": "Balagandi", "type": "Stop"},
+                {"time": "07:30 AM", "stop": "Puri Railway Station", "type": "Stop"},
+                {"time": "07:45 AM", "stop": "Jagannath Temple", "type": "End"},
+                {"time": "08:15 AM", "stop": "Jagannath Temple", "type": "Start"},
+                {"time": "08:30 AM", "stop": "Puri Railway Station", "type": "Stop"},
+                {"time": "08:45 AM", "stop": "Balagandi", "type": "Stop"},
+                {"time": "09:00 AM", "stop": "Grand Road", "type": "Stop"},
+                {"time": "09:15 AM", "stop": "Sea Beach Road", "type": "Stop"},
+                {"time": "09:30 AM", "stop": "Swargadwar", "type": "Stop"},
+                {"time": "09:45 AM", "stop": "Puri Beach", "type": "End"},
+            ],
+            "100": [
+                {"time": "07:00 AM", "stop": "Bhubaneswar Station", "type": "Start"},
+                {"time": "07:20 AM", "stop": "Kalpana Square", "type": "Stop"},
+                {"time": "07:40 AM", "stop": "Patia", "type": "Stop"},
+                {"time": "08:00 AM", "stop": "Nandankanan", "type": "End"},
+            ],
+            "300": [
+                {"time": "06:30 AM", "stop": "Berhampur Bus Stand", "type": "Start"},
+                {"time": "06:50 AM", "stop": "Silk City", "type": "Stop"},
+                {"time": "07:10 AM", "stop": "Gopalpur", "type": "End"},
+            ],
+            "301": [
+                {"time": "07:00 AM", "stop": "Berhampur University", "type": "Start"},
+                {"time": "07:25 AM", "stop": "Berhampur Market", "type": "Stop"},
+                {"time": "07:50 AM", "stop": "Berhampur Station", "type": "End"},
+            ]
+        }
+        
+        # Use fallback schedule if available
+        if str(bus_no) in FALLBACK_SCHEDULES:
+            return Response(FALLBACK_SCHEDULES[str(bus_no)])
+        
+        # No schedule found
+        return Response({"error": "No schedule available for this bus"}, status=404)
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)

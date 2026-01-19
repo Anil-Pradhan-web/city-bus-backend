@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+import random
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 
@@ -63,12 +64,12 @@ class CurrentLocationView(APIView):
 # =========================
 class BusETAView(APIView):
     """
-    GET: Returns next stop and ETA (in minutes)
+    GET: Returns ETAs for all stops on the route for each active bus.
     """
-
-    AVG_SPEED_KMPH = 28
-
+    # Use same speed as MoveBusView for consistency
     def get(self, request, bus_no):
+        # Realistic city bus speed for all buses
+        bus_speed = 60
         buses = Bus.objects.filter(bus_number=str(bus_no)).select_related('route')
         if not buses.exists():
             return Response({"detail": "Bus not found"}, status=404)
@@ -77,55 +78,90 @@ class BusETAView(APIView):
 
         for bus in buses:
             live = LiveLocation.objects.filter(bus=bus).first()
-            if not live:
+            if not live or not bus.route:
                 continue
 
-            # Check ForeignKey (bus.route)
-            route = bus.route
-            if not route:
-                continue
-
-            stops = list(Stop.objects.filter(route=route).order_by("order"))
+            stops = list(Stop.objects.filter(route=bus.route).order_by("order"))
             if not stops:
                 continue
 
-            current_index = live.current_stop_index
+            current_idx = live.current_stop_index
+
+            # SAFETY CHECK: Valid index?
+            if current_idx >= len(stops) or current_idx < 0:
+                current_idx = 0
+                # Optionally auto-correct DB
+                live.current_stop_index = 0
+                live.save()
             forward = live.is_moving_forward
             total_stops = len(stops)
-            next_index = current_index
+            
+            # Calculate ETAs for all stops from the current position
+            stops_eta = []
+            
+            # Simple simulation of path
+            temp_idx = current_idx
+            temp_forward = forward
+            temp_lat = live.latitude
+            temp_lon = live.longitude
+            accumulated_time = 0
+            
+            # SAFETY CHECK: Fix direction if stuck at terminal
+            if current_idx == 0 and not forward:
+                forward = True
+            elif current_idx == len(stops) - 1 and forward:
+                forward = False
 
-            if total_stops > 1:
-                if forward:
-                    if current_index < total_stops - 1:
-                        next_index = current_index + 1
-                    else:
-                        next_index = current_index - 1
-                else:
-                    if current_index > 0:
-                        next_index = current_index - 1
-                    else:
-                        next_index = current_index + 1
+            # We calculate ETA for the next 10 stop-steps or until end of route
+            stops_to_visit = stops[current_idx+1:] if forward else stops[:current_idx][::-1]
+            
+            # If at the very end, we might be waiting or about to turn
+            if not stops_to_visit:
+                pass
 
-            current_stop = stops[current_index]
-            next_stop = stops[next_index]
+            for next_stop in stops_to_visit:
+                dist = haversine(temp_lat, temp_lon, next_stop.latitude, next_stop.longitude)
+                travel_time_min = (dist / bus_speed) * 60
+                
+                # Add stop delay if it's not the first segment
+                if accumulated_time > 0:
+                    accumulated_time += (3 / 60) # 3 seconds wait
+                
+                accumulated_time += travel_time_min
+                
+                
+                stops_eta.append({
+                    "stop_name": next_stop.name,
+                    "eta_minutes": max(1, round(accumulated_time)),
+                    "order": next_stop.order
+                })
+                
+                # Update temp pos for next segment
+                temp_lat = next_stop.latitude
+                temp_lon = next_stop.longitude
 
-            distance_km = haversine(
-                live.latitude,
-                live.longitude,
-                next_stop.latitude,
-                next_stop.longitude
-            )
-
-            eta_minutes = max(1, round((distance_km / self.AVG_SPEED_KMPH) * 60))
+            # Handle case where no stops provided
+            if stops_eta:
+                next_stop_name = stops_eta[0]["stop_name"]
+                first_eta = stops_eta[0]["eta_minutes"]
+            else:
+                # Fallback: If no stops in ETA list, we are at terminal.
+                # If forward=True at the end, we are at Last Stop. Target is turn around? 
+                # Display current stop as "Arrived at X" or just X.
+                next_stop_name = stops[current_idx].name
+                first_eta = 0
 
             results.append({
                 "bus_id": bus.id,
                 "bus_no": bus.bus_number,
-                "current_stop": current_stop.name,
-                "next_stop": next_stop.name,
-                "distance_km": round(distance_km, 2),
-                "eta_minutes": eta_minutes,
-                "is_moving_forward": forward
+                "current_stop": stops[current_idx].name,
+                "is_moving_forward": forward,
+                "stops_eta": stops_eta,
+                # For backward compatibility
+                "next_stop": next_stop_name,
+                "eta_minutes": first_eta,
+                "speed": live.speed,
+                "crowding": live.crowding
             })
 
         return Response(results)
@@ -168,34 +204,34 @@ class BusRouteView(APIView):
 
 
 # =========================
-# MOVE BUS (SIMPLE CIRCULAR)
+# MOVE BUS (SMOOTH INTERPOLATION WITH ETA)
 # =========================
 class MoveBusView(APIView):
     """
-    POST: Simulates bus moving stop-by-stop safely (LOCKED)
+    POST: Simulates bus moving with smooth interpolation between stops.
+    Includes ETA calculation directly in the response to ensure frontend has all data.
     """
-    # authentication_classes = [TokenAuthentication, SessionAuthentication]
-    # permission_classes = [IsAuthenticated]
+    STOP_DELAY_SECONDS = 0 # No stop delay, continuous movement
 
     def post(self, request, bus_no):
         buses = Bus.objects.filter(bus_number=str(bus_no)).select_related('route')
         if not buses.exists():
             return Response({"error": "Bus not found"}, status=404)
 
-        results = []
+        # Realistic city bus speed for all buses
+        # "Thoda" faster simulation speed for all buses
+        bus_speed = 450
 
+        results = []
         now = timezone.now()
 
         for bus in buses:
-            # Check ForeignKey (bus.route)
             route = bus.route
             if not route:
-                results.append({"bus_id": bus.id, "error": "Route not assigned"})
                 continue
 
             stops = list(Stop.objects.filter(route=route).order_by("order"))
             if not stops:
-                results.append({"bus_id": bus.id, "error": "No stops found"})
                 continue
 
             live, _ = LiveLocation.objects.get_or_create(
@@ -204,69 +240,184 @@ class MoveBusView(APIView):
                     "latitude": stops[0].latitude,
                     "longitude": stops[0].longitude,
                     "current_stop_index": 0,
+                    "is_moving_forward": True
                 }
             )
 
-            # 🔒 LOCK START
-            if live.last_moved_at and (now - live.last_moved_at) < timedelta(seconds=10):
-                results.append({
-                    "bus_id": bus.id,
-                    "bus_no": bus.bus_number,
-                    "latitude": live.latitude,
-                    "longitude": live.longitude,
-                    "stop_name": stops[live.current_stop_index].name,
-                    "stop_index": live.current_stop_index,
-                    "is_moving_forward": live.is_moving_forward,
-                    "locked": True,
-                })
-                continue
-            # 🔒 LOCK END
-
-            # ✅ SAFE MOVE (PING-PONG)
-            total_stops = len(stops)
-            current = live.current_stop_index
-            forward = live.is_moving_forward
-
-            if total_stops > 1:
-                if forward:
-                    if current < total_stops - 1:
-                        next_index = current + 1
-                    else:
-                        # Turned around at End
-                        forward = False
-                        next_index = current - 1
+            # --- Logic 0: Dynamic Data Simulation ---
+            if random.random() < 0.2: 
+                # INCREASED SPEED range for smoother fast movement
+                live.speed = max(40, min(100, live.speed + random.randint(-5, 5)))
+            
+            # --- Logic 1: Stop Waiting (Start & End Only) ---
+            current_status = "MOVING"
+            if live.stop_arrival_time:
+                time_at_stop = (now - live.stop_arrival_time).total_seconds()
+                
+                # 5 seconds delay ONLY at Start (0) and End (total_stops - 1)
+                required_delay = 0
+                if live.current_stop_index == 0 or live.current_stop_index == len(stops) - 1:
+                    required_delay = 5.0
+                
+                if time_at_stop < required_delay:
+                    current_status = "WAITING"
                 else:
-                    if current > 0:
-                        next_index = current - 1
-                    else:
-                        # Turned around at Start
-                        forward = True
-                        next_index = current + 1
+                    live.stop_arrival_time = None
+                    live.save()
+            
+            # Use current state
+            current_idx = live.current_stop_index
+            
+            # SAFETY CHECK
+            if current_idx >= len(stops) or current_idx < 0:
+                current_idx = 0
+                live.current_stop_index = 0
+                live.latitude = stops[0].latitude
+                live.longitude = stops[0].longitude
+                live.save()
+            
+            forward = live.is_moving_forward
+            stop_name = stops[current_idx].name
+            
+            new_latitude = live.latitude
+            new_longitude = live.longitude
+            progress_pct = 0
+
+            # --- Logic 2: Movement ---
+            if current_status != "WAITING":
+                if forward:
+                    next_idx = current_idx + 1 if current_idx < len(stops) - 1 else current_idx - 1
+                    if current_idx >= len(stops) - 1: forward = False
+                else:
+                    next_idx = current_idx - 1 if current_idx > 0 else current_idx + 1
+                    if current_idx <= 0: forward = True
+                
+                if next_idx < 0: next_idx = 0
+                if next_idx >= len(stops): next_idx = len(stops) - 1
+
+                current_stop = stops[current_idx]
+                next_stop = stops[next_idx]
+
+                # Speed Calculation (High speed requested)
+                # 800 km/h simulation speed for fast visibility
+                simulation_speed = 800 
+                
+                seg_dist_km = haversine(
+                    current_stop.latitude, current_stop.longitude,
+                    next_stop.latitude, next_stop.longitude
+                )
+                
+                # Avoid division by zero
+                seg_time_sec = (seg_dist_km / simulation_speed) * 3600 if seg_dist_km > 0 else 1.0
+                
+                # Update interval (2 seconds)
+                update_interval = 2.0
+                
+                # Progress increment
+                progress_step = update_interval / seg_time_sec
+                
+                # Calculate current progress on this segment
+                dist_from_start = haversine(
+                    current_stop.latitude, current_stop.longitude,
+                    live.latitude, live.longitude
+                )
+                
+                current_progress = dist_from_start / seg_dist_km if seg_dist_km > 0 else 1.0
+                new_progress = current_progress + progress_step
+                
+                if new_progress >= 0.99:
+                    # Arrived at stop
+                    live.latitude = next_stop.latitude
+                    live.longitude = next_stop.longitude
+                    live.current_stop_index = next_idx
+                    live.is_moving_forward = forward
+                    live.stop_arrival_time = now # Start waiting timer
+                    live.save()
+                    
+                    new_latitude = next_stop.latitude
+                    new_longitude = next_stop.longitude
+                    stop_name = next_stop.name
+                    current_status = "ARRIVED"
+                    progress_pct = 100
+                    
+                    current_idx = next_idx 
+
+                else:
+                    # Interpolation
+                    total_lat_diff = next_stop.latitude - current_stop.latitude
+                    total_lng_diff = next_stop.longitude - current_stop.longitude
+                    
+                    new_latitude = current_stop.latitude + (total_lat_diff * new_progress)
+                    new_longitude = current_stop.longitude + (total_lng_diff * new_progress)
+                    
+                    live.latitude = new_latitude
+                    live.longitude = new_longitude
+                    live.last_moved_at = now
+                    live.save()
+                    
+                    stop_name = f"En route to {next_stop.name}"
+                    progress_pct = round(new_progress * 100, 1)
+
+            # --- Logic 3: Calculate ETA (Embedded) ---
+            stops_eta = []
+            accumulated_time = 0
+            temp_lat = new_latitude
+            temp_lon = new_longitude
+            
+            # Determine path
+            # SAFETY CHECK: Fix direction if stuck at terminal (same as ETAView)
+            temp_forward = live.is_moving_forward
+            if current_idx == 0 and not temp_forward:
+                temp_forward = True
+            elif current_idx == len(stops) - 1 and temp_forward:
+                temp_forward = False
+
+            stops_to_visit = stops[current_idx+1:] if temp_forward else stops[:current_idx][::-1]
+
+            for next_s in stops_to_visit:
+                dist = haversine(temp_lat, temp_lon, next_s.latitude, next_s.longitude)
+                travel_time_min = (dist / bus_speed) * 60
+                
+                if accumulated_time > 0:
+                    accumulated_time += (3 / 60) # 3s delay
+                
+                accumulated_time += travel_time_min
+                
+                stops_eta.append({
+                    "stop_name": next_s.name,
+                    "eta_minutes": max(1, round(accumulated_time)),
+                    "order": next_s.order
+                })
+                
+                temp_lat = next_s.latitude
+                temp_lon = next_s.longitude
+            
+            # Robust Next Stop Name
+            if stops_eta:
+                next_stop_display = stops_eta[0]["stop_name"]
+                first_eta = stops_eta[0]["eta_minutes"]
             else:
-                next_index = current
-
-            # Safety Fallback
-            if next_index < 0: next_index = 0
-            if next_index >= total_stops: next_index = total_stops - 1
-
-            next_stop = stops[next_index]
-
-            live.latitude = next_stop.latitude
-            live.longitude = next_stop.longitude
-            live.current_stop_index = next_index
-            live.is_moving_forward = forward
-            live.last_moved_at = now
-            live.save()
+                next_stop_display = stops[current_idx].name
+                first_eta = 0
 
             results.append({
                 "bus_id": bus.id,
                 "bus_no": bus.bus_number,
-                "latitude": live.latitude,
-                "longitude": live.longitude,
-                "stop_name": next_stop.name,
-                "stop_index": next_index,
-                "is_moving_forward": forward,
-                "locked": False,
+                "latitude": new_latitude,
+                "longitude": new_longitude,
+                "stop_name": stop_name,
+                "status": current_status,
+                "progress": progress_pct,
+                # Indices for frontend interpolation
+                "current_stop_index": current_idx,
+                "next_stop_index": next_idx if current_status != "WAITING" else current_idx,
+                "is_moving_forward": live.is_moving_forward,
+                # Enriched Data
+                "stops_eta": stops_eta,
+                "next_stop": next_stop_display,
+                "eta_minutes": first_eta,
+                "speed": live.speed if current_status != "WAITING" else 0,
+                "crowding": live.crowding
             })
 
         return Response(results)

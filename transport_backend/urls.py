@@ -31,5 +31,7 @@ urlpatterns = [
     # Buses and Stops endpoints
     path("api/buses/", include("buses.urls")),
     path("api/stops/", include("stops.urls")),
+    # Feedback and Contact endpoints
+    path("api/", include("feedback.urls")),
 ]
 

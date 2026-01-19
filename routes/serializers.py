@@ -12,9 +12,11 @@ class RouteSerializer(serializers.ModelSerializer):
     stops_count = serializers.SerializerMethodField()
     frequency = serializers.SerializerMethodField()
     
+    city = serializers.SerializerMethodField()
+    
     class Meta:
         model = Route
-        fields = ['id', 'name', 'bus_no', 'from_stop', 'to_stop', 'distance', 'stops_count', 'frequency']
+        fields = ['id', 'name', 'bus_no', 'from_stop', 'to_stop', 'distance', 'stops_count', 'frequency', 'city']
     
     def get_bus_no(self, obj):
         # Reverse relation: Route -> Buses (related_name='buses')
@@ -23,7 +25,6 @@ class RouteSerializer(serializers.ModelSerializer):
             return bus.bus_number
         return None
     
-
     
     def get_from_stop(self, obj):
         """Get first stop name (lowest order)"""
@@ -39,7 +40,7 @@ class RouteSerializer(serializers.ModelSerializer):
         """Calculate total route distance by summing distances between consecutive stops"""
         stops = list(Stop.objects.filter(route=obj).order_by('order'))
         if len(stops) < 2:
-            return 0.0
+            return "N/A"
         
         total_distance = 0.0
         for i in range(len(stops) - 1):
@@ -51,16 +52,31 @@ class RouteSerializer(serializers.ModelSerializer):
             )
             total_distance += distance
         
-        return round(total_distance, 2)
+        return f"{round(total_distance, 1)} km"
     
     def get_stops_count(self, obj):
         """Get total number of stops in the route"""
-        return Stop.objects.filter(route=obj).count()
+        count = Stop.objects.filter(route=obj).count()
+        return f"{count} Stops"
     
     def get_frequency(self, obj):
-        """Get bus frequency (default: 15 minutes if not set)"""
-        # Frequency can be added to Route model later, for now return default
-        return "15 min"
+        """Get bus frequency based on route/city"""
+        bus = obj.buses.first()
+        if bus:
+            return "Every 10 mins"
+        
+        return "Every 10 mins"
+
+    def get_city(self, obj):
+        """Derive city from bus number pattern"""
+        bus = obj.buses.first()
+        if bus:
+            num = str(bus.bus_number)
+            if num.startswith('1'): return "Bhubaneswar"
+            if num.startswith('2'): return "Puri"
+            if num.startswith('3'): return "Berhampur"
+            if num.startswith('4'): return "Cuttack"
+        return "Odisha"
     
     def to_representation(self, instance):
         """Rename fields to match frontend expectations"""

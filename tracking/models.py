@@ -43,6 +43,24 @@ class LiveLocation(models.Model):
         help_text="True = Start to End, False = End to Start"
     )
 
+    speed = models.IntegerField(
+        default=40,
+        help_text="Current speed in km/h"
+    )
+
+    crowding = models.CharField(
+        max_length=10,
+        default="Medium",
+        choices=[("Low", "Low"), ("Medium", "Medium"), ("High", "High")],
+        help_text="Current crowding level"
+    )
+
+    stop_arrival_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Time when bus arrived at current stop (for 2-second delay)"
+    )
+
     class Meta:
         verbose_name = "Live Location"
         verbose_name_plural = "Live Locations"

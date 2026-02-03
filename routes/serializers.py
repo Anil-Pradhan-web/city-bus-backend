@@ -9,14 +9,30 @@ class RouteSerializer(serializers.ModelSerializer):
     from_stop = serializers.SerializerMethodField()
     to_stop = serializers.SerializerMethodField()
     distance = serializers.SerializerMethodField()
+    distance_km = serializers.SerializerMethodField()
     stops_count = serializers.SerializerMethodField()
+    stops_count_value = serializers.SerializerMethodField()
     frequency = serializers.SerializerMethodField()
+    frequency_minutes = serializers.SerializerMethodField()
     
     city = serializers.SerializerMethodField()
     
     class Meta:
         model = Route
-        fields = ['id', 'name', 'bus_no', 'from_stop', 'to_stop', 'distance', 'stops_count', 'frequency', 'city']
+        fields = [
+            'id',
+            'name',
+            'bus_no',
+            'from_stop',
+            'to_stop',
+            'distance',
+            'distance_km',
+            'stops_count',
+            'stops_count_value',
+            'frequency',
+            'frequency_minutes',
+            'city',
+        ]
     
     def get_bus_no(self, obj):
         # Reverse relation: Route -> Buses (related_name='buses')
@@ -53,11 +69,33 @@ class RouteSerializer(serializers.ModelSerializer):
             total_distance += distance
         
         return f"{round(total_distance, 1)} km"
+
+    def get_distance_km(self, obj):
+        """Return total route distance as a numeric value in kilometers."""
+        stops = list(Stop.objects.filter(route=obj).order_by('order'))
+        if len(stops) < 2:
+            return None
+
+        total_distance = 0.0
+        for i in range(len(stops) - 1):
+            distance = haversine(
+                stops[i].latitude,
+                stops[i].longitude,
+                stops[i + 1].latitude,
+                stops[i + 1].longitude
+            )
+            total_distance += distance
+
+        return round(total_distance, 1)
     
     def get_stops_count(self, obj):
         """Get total number of stops in the route"""
         count = Stop.objects.filter(route=obj).count()
         return f"{count} Stops"
+
+    def get_stops_count_value(self, obj):
+        """Return total number of stops as an integer."""
+        return Stop.objects.filter(route=obj).count()
     
     def get_frequency(self, obj):
         """Get bus frequency based on route/city"""
@@ -66,6 +104,14 @@ class RouteSerializer(serializers.ModelSerializer):
             return "Every 10 mins"
         
         return "Every 10 mins"
+
+    def get_frequency_minutes(self, obj):
+        """Return frequency in minutes as an integer for frontend use."""
+        bus = obj.buses.first()
+        if bus:
+            return 10
+
+        return 10
 
     def get_city(self, obj):
         """Derive city from bus number pattern"""

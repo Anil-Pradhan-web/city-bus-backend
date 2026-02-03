@@ -160,6 +160,8 @@ class BusETAView(APIView):
                 # For backward compatibility
                 "next_stop": next_stop_name,
                 "eta_minutes": first_eta,
+                "next_stop_name": next_stop_name,
+                "next_stop_eta_minutes": first_eta,
                 "speed": live.speed,
                 "crowding": live.crowding
             })

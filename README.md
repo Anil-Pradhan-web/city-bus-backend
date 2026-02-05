@@ -1,24 +1,26 @@
 # 🚌 City-Bus Live - Backend
 
-The robust Django REST Framework backend powering the City-Bus Live tracking system. This API handles bus management, route coordination, real-time location updates, and ETA calculations.
+The robust Django REST Framework backend powering the City-Bus Live tracking system. This API handles bus management, route coordination, real-time location updates, distance-based fare logic, and intelligent trip planning.
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Django 6.0 + Django REST Framework
-- **Database**: SQLite3 (Development) / Scalable to PostgreSQL
-- **Real-time**: Custom tracking logic with ETA interpolation
-- **Security**: Token-based authentication for Admin actions
+- **Framework**: Django 4.2+ & Django REST Framework
+- **Authentication**: JWT & SimpleJWT for secure API access
+- **Real-time Engine**: Smooth interpolation logic for bus movement simulation
+- **Geography**: Haversine formula for precise KM-based distance and fare calculation
+- **Database**: SQLite3 (Development)
 
 ## 📂 Project Structure
 
 ```
 transport_backend/
-├── buses/          # Bus entity management & Schedules
-├── routes/         # Route paths & sequences
-├── stops/          # Bus stop locations (Lat/Lng)
-├── tracking/       # Live location updates & ETA engine
-├── feedback/       # User feedback collection
-└── transport_backend/  # Project settings & configuration
+├── buses/          # Bus entity management & registrations
+├── routes/         # Intelligent Trip Planning & Route sequence logic
+├── stops/          # Geo-coordinated stop locations
+├── tracking/       # Live location engine & ETA calculations
+├── users/          # Custom User model & Auth logic
+├── feedback/       # Contact & User feedback storage
+└── transport_backend/ # Core project settings
 ```
 
 ## 🚀 Getting Started
@@ -60,29 +62,28 @@ transport_backend/
    ```
    The API will be available at `http://127.0.0.1:8000/`.
 
-## 🔌 API Endpoints
+## 🧠 Advanced Features
 
-### 📍 Tracking
-- `GET /api/tracking/live/`: Get all live buses
-- `POST /api/tracking/move/<bus_id>/`: Update bus location (Admin/Driver)
-- `GET /api/tracking/eta/<bus_id>/`: Get estimated arrival times
+### 🗺️ Intelligent Trip Planner
+The backend implements a sophisticated search algorithm:
+- **Direct Routes**: Finds single buses connecting two points.
+- **One-Hop Transfers**: Identifies optimal transfer points between intersecting routes.
+- **Directional Logic**: Handles both forward and return route sequences.
 
-### 🚌 Buses & Routes
-- `GET /api/buses/`: List all buses
-- `GET /api/routes/`: List all routes
-- `GET /api/routes/<id>/stops/`: Get stops for a specific route
+### 💸 Distance-Based Fare System
+Replaced stop-based pricing with actual geographic distance:
+- **Logic**: Uses the Haversine formula to compute KM distance between stops.
+- **Rate**: Standardized at ₹5 per Kilometer.
+- **Minimums**: Guaranteed minimum fare for short hops.
 
-### 📝 Feedback
-- `POST /api/feedback/`: Submit user feedback
+### 🛰️ Live Tracking Engine
+- **Interpolation**: Smooth movement between stops (no teleporting).
+- **ETA**: Dynamic arrival estimates for all upcoming stops based on current bus speed.
 
-## 🔐 Admin Access
-
-Django defines a built-in admin interface for managing data.
+## 🔐 Data Management (Django Admin)
+The system is designed to be managed primarily through the built-in Django Admin panel.
 - URL: `http://127.0.0.1:8000/admin/`
-- **Note**: You must create a superuser first using `python manage.py createsuperuser`.
+- **Setup**: Use `python manage.py createsuperuser` to set up access.
 
-## ⚙️ Configuration
-
-Settings are located in `transport_backend/settings.py`.
-- **CORS**: Configured to allow `localhost:5173` (Frontend).
-- **DEBUG**: Set to `True` for development.
+---
+Maintained by [Anil](https://github.com/Anil-Pradhan-web)

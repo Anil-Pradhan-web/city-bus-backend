@@ -33,5 +33,7 @@ urlpatterns = [
     path("api/stops/", include("stops.urls")),
     # Feedback and Contact endpoints
     path("api/", include("feedback.urls")),
+    # User Auth & Favorites
+    path("api/users/", include("users.urls")),
 ]
 
